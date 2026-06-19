@@ -37,7 +37,7 @@ from ..utils import executor, get_current_time, get_real_time, get_used_time, sp
 from ..utils.dataclass import update
 from ..utils.file import clear_file_name_index_cache, copy_file_async, move_file_async
 from ..utils.path import is_any_descendant
-from .file import creat_folder, deal_old_files, get_file_info_v2, get_output_name, move_movie
+from .file import creat_folder, deal_old_files, generate_failed_file_name, get_file_info_v2, get_output_name, move_movie
 from .file_crawler import FileScraper, classify_existing_scrape_result, classify_scrape_task
 from .image import add_mark
 from .media_resource import MediaResourceContext
@@ -433,7 +433,10 @@ class Scraper:
                             "\n 🔴 该问题为权限问题：请尝试以管理员身份运行，同时关闭其他正在运行的Python脚本！"
                         )
                 failed_folder = get_movie_path_setting(file_path).failed_folder
-                fail_file_path = await move_file_to_failed_folder(failed_folder, file_path, folder_old_path)
+                failed_new_name = generate_failed_file_name(file_info)
+                fail_file_path = await move_file_to_failed_folder(
+                    failed_folder, file_path, folder_old_path, new_file_name=failed_new_name
+                )
                 Flags.failed_list.append((fail_file_path, LogBuffer.error().get()))
                 await self._failed_file_info_show(str(Flags.fail_count), fail_file_path, LogBuffer.error().get())
                 signal.view_failed_list_settext.emit(f"失败 {Flags.fail_count}")

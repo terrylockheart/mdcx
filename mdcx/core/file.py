@@ -302,6 +302,17 @@ def _generate_file_name(cd_part, file_info: FileInfo, res: CrawlersResult) -> st
     return file_name
 
 
+def generate_failed_file_name(file_info: FileInfo) -> str:
+    """为刮削失败的文件生成新文件名。
+
+    失败文件没有刮削数据, 这里用已识别的番号(及清晰度/字幕等本地信息)套用与成功流程
+    相同的命名模板。若番号未能识别, 模板会回退为原文件名, 因此不会破坏无法识别的文件。
+    """
+    res = CrawlersResult.empty()
+    res.number = file_info.number
+    return _generate_file_name(file_info.cd_part, file_info, res)
+
+
 def get_output_name(
     file_info: FileInfo, json_data: CrawlersResult, success_folder: Path, file_ex: str
 ) -> tuple[Path, Path, Path, Path, Path, Path, str, Path, Path, Path]:

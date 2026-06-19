@@ -603,7 +603,9 @@ async def newtdisk_creat_symlink(
         signal.reset_buttons_status.emit()
 
 
-async def move_file_to_failed_folder(failed_folder: Path, file_path: Path, folder_old_path: Path) -> Path:
+async def move_file_to_failed_folder(
+    failed_folder: Path, file_path: Path, folder_old_path: Path, new_file_name: str | None = None
+) -> Path:
     # 更新模式、读取模式，不移动失败文件；不移动文件-关时，不移动； 软硬链接开时，不移动
     main_mode = manager.config.main_mode
     if main_mode == 3 or main_mode == 4 or not manager.config.failed_file_move or manager.config.soft_link != 0:
@@ -619,8 +621,9 @@ async def move_file_to_failed_folder(failed_folder: Path, file_path: Path, folde
             signal.show_log_text(traceback.format_exc())
 
     # 获取文件路径
-    file_full_name = file_path.name
     file_ext = file_path.suffix
+    # 失败文件也套用命名规则; new_file_name 为不含扩展名的新文件名, 为空则保留原名
+    file_full_name = (new_file_name + file_ext) if new_file_name else file_path.name
     trailer_old_path_no_filename = folder_old_path / "trailers/trailer.mp4"
     trailer_old_path_with_filename = file_path.with_name(file_path.stem + "-trailer.mp4")
 
