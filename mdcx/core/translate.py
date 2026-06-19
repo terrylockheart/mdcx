@@ -201,10 +201,10 @@ async def translate_actor(res: CrawlersResult):
                 actor: str = res.actor
                 actor_list = res.all_actors
                 res.actor = temp_actor
-                # 从actor_list中循环查找元素是否包含字符串temp_actor，有则替换
-                for item in actor_list:
+                # 从actor_list中循环查找元素是否包含字符串actor，有则替换
+                for idx, item in enumerate(actor_list):
                     if item.find(actor) != -1:
-                        actor_list[actor_list.index(item)] = temp_actor
+                        actor_list[idx] = temp_actor
                 res.all_actors = actor_list
 
                 LogBuffer.log().write(

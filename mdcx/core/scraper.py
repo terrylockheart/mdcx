@@ -35,7 +35,7 @@ from ..tools.emby_actor_image import update_emby_actor_photo
 from ..tools.emby_actor_info import creat_kodi_actors
 from ..utils import executor, get_current_time, get_real_time, get_used_time, split_path
 from ..utils.dataclass import update
-from ..utils.file import copy_file_async, move_file_async
+from ..utils.file import clear_file_name_index_cache, copy_file_async, move_file_async
 from ..utils.path import is_any_descendant
 from .file import creat_folder, deal_old_files, get_file_info_v2, get_output_name, move_movie
 from .file_crawler import FileScraper, classify_existing_scrape_result, classify_scrape_task
@@ -148,6 +148,7 @@ class Scraper:
 
     async def _run(self, file_mode: FileMode, movie_list: list[Path] | None) -> None:
         Flags.reset()
+        clear_file_name_index_cache()  # 清空字幕包等外部目录索引缓存, 保证本次刮削使用最新内容
         if movie_list is None:
             movie_list = []
         Flags.scrape_start_time = time.time()  # 开始刮削时间

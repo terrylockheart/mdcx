@@ -8,7 +8,9 @@ from ..config.manager import manager
 from ..core.file import get_file_info_v2
 from ..core.scraper import start_new_scrape
 from ..models.enums import FileMode
+from ..models.flags import Flags
 from ..signals import signal
+from ..tools.subtitle_online import download_subtitle_for_movie
 from ..utils import split_path
 from ..utils.file import build_file_name_index, copy_file_async, find_file_from_index, move_file_async
 
@@ -35,14 +37,16 @@ async def add_sub_for_all_video() -> None:
             signal.show_log_text("字幕文件夹不存在！\n只能检查无字幕视频，无法添加字幕！")
             signal.show_log_text("================================================================================")
 
-        movie_path = get_movie_path_setting().movie_path
-        signal.show_log_text(f" 🖥 Movie path: {movie_path} \n 🔎 正在检查所有视频，请稍候...")
+        # 扫描目标库（成功输出目录），而非待刮削的媒体扫描目录
+        library_path = get_movie_path_setting().success_folder
+        signal.show_log_text(f" 🖥 Library path: {library_path} \n 🔎 正在检查目标库内所有视频，请稍候...")
         if manager.config.subtitle_add_chs:
             signal.show_log_text(" 如果字幕文件名不以 .chs 结尾，则会自动添加！\n")
         else:
             signal.show_log_text(" 如果字幕文件名以 .chs 结尾，将被自动删除！\n")
         movie_type = manager.config.media_type
-        movie_list = await movie_lists([], movie_type, movie_path)  # 获取所有需要刮削的影片列表
+        # 仅检查/添加字幕，扫描时不执行自动清理，避免误删目标库文件
+        movie_list = await movie_lists([], movie_type, library_path, auto_clean=False)  # 获取目标库内所有影片列表
         sub_type_list = manager.config.sub_type  # 本地字幕文件后缀
         subtitle_file_index = {}
         if sub_add:
@@ -54,6 +58,10 @@ async def add_sub_for_all_video() -> None:
         no_sub_count = 0
         new_sub_movie_list = []
         for movie in movie_list:
+            # 在线下载较慢, 支持随时停止
+            if manager.config.subtitle_online and (signal.stop or Flags.stop_requested):
+                signal.show_log_text("⛔️ 字幕处理已手动停止！")
+                break
             file_info = await get_file_info_v2(movie, copy_sub=False)
             number = file_info.number
             folder_old_path = file_info.folder_path
@@ -64,8 +72,8 @@ async def add_sub_for_all_video() -> None:
                 no_sub_count += 1
                 signal.show_log_text(f" No sub:'{movie}' ")
                 cd_part = file_info.cd_part
+                add_succ = False
                 if sub_add:
-                    add_succ = False
                     for sub_type in sub_type_list:
                         sub_path = find_file_from_index(
                             subtitle_file_index,
@@ -81,8 +89,15 @@ async def add_sub_for_all_video() -> None:
                             signal.show_log_text(f" 🍀 字幕文件 '{sub_file_name}' 成功复制! 来源: {sub_path}")
                             new_sub_movie_list.append(movie)
                             add_succ = True
-                    if add_succ:
-                        add_count += 1
+                # 本地字幕目录未命中时, 回退到在线下载
+                if not add_succ and manager.config.subtitle_online:
+                    online_sub_path = await download_subtitle_for_movie(number, file_name, folder_old_path)
+                    if online_sub_path:
+                        signal.show_log_text(f" 🍀 在线字幕下载成功: '{online_sub_path.name}' (番号: {number})")
+                        new_sub_movie_list.append(movie)
+                        add_succ = True
+                if add_succ:
+                    add_count += 1
             elif sub_list:
                 for sub_type in sub_list:
                     sub_old_path = str(folder_old_path / (file_name + sub_type))

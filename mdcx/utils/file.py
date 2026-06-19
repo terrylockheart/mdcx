@@ -22,12 +22,42 @@ def _build_file_name_index_sync(folder: Path) -> dict[str, Path]:
     return file_name_index
 
 
-async def build_file_name_index(folder: str | Path) -> dict[str, Path]:
-    """递归索引目录内文件名，用于在字幕包等外部目录中快速匹配文件。"""
+# 在一次刮削/批处理内, 字幕包等外部目录是静态的, 缓存其索引避免对每部影片重复递归扫描.
+# 通过 clear_file_name_index_cache() 在每次任务开始时清空以保证跨任务的新鲜度.
+_file_name_index_cache: dict[str, dict[str, Path]] = {}
+_file_name_index_locks: dict[str, asyncio.Lock] = {}
+
+
+def clear_file_name_index_cache() -> None:
+    """清空文件名索引缓存. 应在每次刮削/字幕任务开始时调用."""
+    _file_name_index_cache.clear()
+    _file_name_index_locks.clear()
+
+
+async def build_file_name_index(folder: str | Path, *, use_cache: bool = False) -> dict[str, Path]:
+    """递归索引目录内文件名，用于在字幕包等外部目录中快速匹配文件。
+
+    use_cache=True 时复用本次任务内的缓存, 避免对每部影片重复递归扫描整个目录。
+    """
     folder = Path(folder)
     if not await aiofiles.os.path.isdir(folder):
         return {}
-    return await asyncio.to_thread(_build_file_name_index_sync, folder)
+    if not use_cache:
+        return await asyncio.to_thread(_build_file_name_index_sync, folder)
+
+    key = str(folder)
+    cached = _file_name_index_cache.get(key)
+    if cached is not None:
+        return cached
+    # 加锁避免多个并发任务同时构建同一索引 (惊群)
+    lock = _file_name_index_locks.setdefault(key, asyncio.Lock())
+    async with lock:
+        cached = _file_name_index_cache.get(key)
+        if cached is not None:
+            return cached
+        index = await asyncio.to_thread(_build_file_name_index_sync, folder)
+        _file_name_index_cache[key] = index
+        return index
 
 
 def find_file_from_index(file_name_index: dict[str, Path], file_names: Iterable[str]) -> Path | None:

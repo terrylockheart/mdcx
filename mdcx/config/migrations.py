@@ -84,6 +84,38 @@ def _migrate_builtin_naming_templates(data: dict[str, Any]) -> None:
         "{actor}/{number} {actor}": "{{ actor }}/{{ number }} {{ actor }}",
     }
 
+    # 旧版命名模板支持的裸字段词。模板中匹配到的整词会被替换为 {{ field }}，其余文本保持原样。
+    legacy_field_tokens = (
+        "number",
+        "title",
+        "originaltitle",
+        "actor",
+        "first_actor",
+        "all_actor",
+        "letters",
+        "first_letter",
+        "outline",
+        "director",
+        "series",
+        "studio",
+        "publisher",
+        "release",
+        "year",
+        "runtime",
+        "mosaic",
+        "definition",
+        "cnword",
+        "moword",
+        "filename",
+        "wanted",
+        "score",
+        "four_k",
+    )
+    legacy_field_word_re = re.compile(r"\b(?:" + "|".join(sorted(legacy_field_tokens, key=len, reverse=True)) + r")\b")
+
+    def convert_legacy_field_words(text: str) -> str:
+        return legacy_field_word_re.sub(lambda m: f"{{{{ {m.group(0)} }}}}", text)
+
     def convert_braced_template(template: str) -> str:
         if "{{" in template or "{%" in template:
             return template
@@ -112,7 +144,11 @@ def _migrate_builtin_naming_templates(data: dict[str, Any]) -> None:
             content = replace_field(template[colon + 1 : end])
             optional = f"{{% if {field} %}}{content}{{% endif %}}"
             template = template[:start] + optional + template[end + 1 :]
-        return replace_field(template)
+        converted = replace_field(template)
+        # 旧版裸字段模板 (无任何大括号) 同样需要转换, 否则 Jinja2 会原样输出字段名
+        if "{{" not in converted and "{%" not in converted:
+            converted = convert_legacy_field_words(converted)
+        return converted
 
     for key in (
         "folder_name",

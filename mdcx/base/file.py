@@ -341,7 +341,9 @@ def get_success_list() -> None:
     signal.view_success_file_settext.emit(f"查看 ({len(Flags.success_list)})")
 
 
-async def movie_lists(ignore_dirs: list[Path], media_type: list[str], movie_path: Path) -> list[Path]:
+async def movie_lists(
+    ignore_dirs: list[Path], media_type: list[str], movie_path: Path, auto_clean: bool = True
+) -> list[Path]:
     start_time = time.time()
     total = []
     skip_list = ["skip", ".skip", ".ignore"]
@@ -378,7 +380,11 @@ async def movie_lists(ignore_dirs: list[Path], media_type: list[str], movie_path
 
                     # 判断清理文件
                     path = root / f
-                    if CleanAction.AUTO_CLEAN in manager.config.clean_enable and need_clean(path, f, file_ext):
+                    if (
+                        auto_clean
+                        and CleanAction.AUTO_CLEAN in manager.config.clean_enable
+                        and need_clean(path, f, file_ext)
+                    ):
                         result, error_info = delete_file_sync(path)
                         if result:
                             signal.show_log_text(f" 🗑 Clean: {path} ")
@@ -392,7 +398,11 @@ async def movie_lists(ignore_dirs: list[Path], media_type: list[str], movie_path
                         if os.path.islink(path):
                             real_path = path.readlink()
                             # 清理失效的软链接文件
-                            if NoEscape.CHECK_SYMLINK in manager.config.no_escape and not os.path.exists(real_path):
+                            if (
+                                auto_clean
+                                and NoEscape.CHECK_SYMLINK in manager.config.no_escape
+                                and not os.path.exists(real_path)
+                            ):
                                 result, error_info = delete_file_sync(path)
                                 if result:
                                     signal.show_log_text(f" 🗑 Clean dead link: {path} ")
@@ -401,7 +411,8 @@ async def movie_lists(ignore_dirs: list[Path], media_type: list[str], movie_path
                                 continue
                             if real_path in temp_total:
                                 skip_repeat_softlink += 1
-                                delete_file_sync(path)
+                                if auto_clean:
+                                    delete_file_sync(path)
                                 continue
                             else:
                                 temp_total.append(real_path)

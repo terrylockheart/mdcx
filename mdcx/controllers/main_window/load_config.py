@@ -727,6 +727,8 @@ def load_config(self: "MyMAinWindow"):
         self.Ui.checkBox_sub_add_chs.setChecked(manager.config.subtitle_add_chs)
         # 重新刮削新添加字幕的视频
         self.Ui.checkBox_sub_rescrape.setChecked(manager.config.subtitle_add_rescrape)
+        # 在线下载字幕
+        self.Ui.checkBox_sub_online.setChecked(manager.config.subtitle_online)
         # endregion
 
         # region emby

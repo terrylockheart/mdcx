@@ -290,3 +290,28 @@ def test_braced_naming_templates_are_migrated_to_jinja2_syntax():
 
     assert data["naming_file"] == "{{ number }}{% if studio %} [{{ studio }}]{% endif %} {{ definition }}"
     Config.model_validate(data)
+
+
+def test_legacy_bare_word_naming_templates_are_migrated_to_jinja2_syntax():
+    # 不在固定白名单内的旧版裸字段模板也应被转换, 否则 Jinja2 会原样输出导致目录名错误
+    data = {
+        "folder_name": "actor/number title",
+        "naming_file": "number title",
+        "naming_media": "number actor title",
+    }
+
+    Config.update(data)
+
+    assert data["folder_name"] == "{{ actor }}/{{ number }} {{ title }}"
+    assert data["naming_file"] == "{{ number }} {{ title }}"
+    assert data["naming_media"] == "{{ number }} {{ actor }} {{ title }}"
+    Config.model_validate(data)
+
+
+def test_legacy_bare_word_keeps_non_field_words_literal():
+    data = {"folder_name": "actor - number"}
+
+    Config.update(data)
+
+    assert data["folder_name"] == "{{ actor }} - {{ number }}"
+    Config.model_validate(data)

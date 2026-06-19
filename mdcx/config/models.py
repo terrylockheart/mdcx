@@ -217,6 +217,11 @@ class Config(BaseModel):
             "hhb_000",
             "[456k.me]",
             "[ThZu.Cc]",
+            "-nyap2p.com",
+            "_U3C3",
+            "[cctv666.com]",
+            "麻豆傳媒",
+            "麻豆传媒",
         ],
         title="要从文件名中删除的字符串",
     )
@@ -548,6 +553,8 @@ class Config(BaseModel):
     subtitle_add: bool = Field(default=False, title="添加字幕")
     subtitle_add_chs: bool = Field(default=True, title="添加中文字幕")
     subtitle_add_rescrape: bool = Field(default=True, title="重新刮削时添加字幕")
+    subtitle_online: bool = Field(default=False, title="在线下载字幕")
+    subtitle_online_source: str = Field(default="subtitlecat", title="在线字幕来源")
     # endregion
 
     # region: Server Settings

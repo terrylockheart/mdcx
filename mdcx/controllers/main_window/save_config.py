@@ -496,6 +496,7 @@ def save_config(self: "MyMAinWindow"):
     manager.config.subtitle_add = get_checkbox(self.Ui.radioButton_add_sub_on)
     manager.config.subtitle_add_chs = get_checkbox(self.Ui.checkBox_sub_add_chs)
     manager.config.subtitle_add_rescrape = get_checkbox(self.Ui.checkBox_sub_rescrape)
+    manager.config.subtitle_online = get_checkbox(self.Ui.checkBox_sub_online)
     # endregion
 
     # region emby

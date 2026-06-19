@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 import shutil
@@ -602,6 +603,10 @@ async def get_file_info_v2(file_path: Path, copy_sub: bool = True) -> FileInfo:
                 if not has_sub and ">中文字幕</" in nfo_content:
                     c_word = cnword_style  # 中文字幕影片后缀
                     has_sub = True
+                # 复用已读取内容, 避免对同一 nfo 文件二次读取
+                if not has_sub and ("<genre>中文字幕</genre>" in nfo_content or "<tag>中文字幕</tag>" in nfo_content):
+                    c_word = cnword_style  # 中文字幕影片后缀
+                    has_sub = True
                 if not mosaic:
                     if ">无码流出</" in nfo_content or ">無碼流出</" in nfo_content:
                         leak = leak_style
@@ -627,23 +632,13 @@ async def get_file_info_v2(file_path: Path, copy_sub: bool = True) -> FileInfo:
             except Exception:
                 signal.show_traceback_log(traceback.format_exc())
 
-        if not has_sub and await aiofiles.os.path.exists(nfo_old_path):
-            try:
-                async with aiofiles.open(nfo_old_path, encoding="utf-8") as f:
-                    nfo_content = await f.read()
-                if "<genre>中文字幕</genre>" in nfo_content or "<tag>中文字幕</tag>" in nfo_content:
-                    c_word = cnword_style  # 中文字幕影片后缀
-                    has_sub = True
-            except Exception:
-                signal.show_traceback_log(traceback.format_exc())
-
         # 查找字幕包目录字幕文件
         subtitle_add = manager.config.subtitle_add
         if not has_sub and copy_sub and subtitle_add:
             subtitle_folder = manager.config.subtitle_folder
             subtitle_add = manager.config.subtitle_add
             if subtitle_add and subtitle_folder:  # 复制字幕开
-                subtitle_file_index = await build_file_name_index(subtitle_folder)
+                subtitle_file_index = await build_file_name_index(subtitle_folder, use_cache=True)
                 for sub_type in sub_type_list:
                     sub_path = find_file_from_index(
                         subtitle_file_index,
@@ -663,6 +658,22 @@ async def get_file_info_v2(file_path: Path, copy_sub: bool = True) -> FileInfo:
                         c_word = cnword_style  # 中文字幕影片后缀
                         has_sub = True
                         break
+
+        # 本地字幕包未命中时, 在线下载中文字幕 (需开启"在线下载字幕"开关)
+        if not has_sub and copy_sub and manager.config.subtitle_online:
+            from ..tools.subtitle_online import download_subtitle_for_movie  # 延迟导入避免循环依赖
+
+            try:
+                online_sub_path = await download_subtitle_for_movie(movie_number, file_name, folder_path)
+            except Exception:
+                online_sub_path = None
+                LogBuffer.log().write("\n" + traceback.format_exc())
+            if online_sub_path:
+                online_sub_type = ".chs.srt" if manager.config.subtitle_add_chs else ".srt"
+                sub_list.append(online_sub_type)
+                c_word = cnword_style  # 中文字幕影片后缀
+                has_sub = True
+                LogBuffer.log().write(f"\n\n 🍉 在线字幕下载成功: '{online_sub_path.name}' (来源: subtitlecat.com)")
 
         mosaic = normalize_mosaic(mosaic)
 
@@ -793,7 +804,7 @@ async def deal_old_files(
                 await delete_file_async(each)
         for each in folder_path_list:
             if await aiofiles.os.path.isdir(each):
-                shutil.rmtree(each, ignore_errors=True)
+                await asyncio.to_thread(shutil.rmtree, each, ignore_errors=True)
         return False, False
 
     # 非视频模式，将本地已有的图片、剧照等文件按命名规则迁移到目标位置。
@@ -1031,7 +1042,7 @@ async def deal_old_files(
         if trailer_old_folder_path != trailer_new_folder_path and await aiofiles.os.path.exists(
             trailer_old_folder_path
         ):
-            shutil.rmtree(trailer_old_folder_path, ignore_errors=True)
+            await asyncio.to_thread(shutil.rmtree, trailer_old_folder_path, ignore_errors=True)
         # 删除带文件名文件，用不到了
         if await aiofiles.os.path.exists(trailer_old_file_path_with_filename):
             await delete_file_async(trailer_old_file_path_with_filename)
@@ -1063,11 +1074,11 @@ async def deal_old_files(
             Flags.file_done_dic[number].update({"local_trailer": trailer_new_file_path_with_filename})
             # 删除旧、新文件夹，用不到了(分集使用local trailer复制即可)
             if await aiofiles.os.path.exists(trailer_old_folder_path):
-                shutil.rmtree(trailer_old_folder_path, ignore_errors=True)
+                await asyncio.to_thread(shutil.rmtree, trailer_old_folder_path, ignore_errors=True)
             if trailer_new_folder_path != trailer_old_folder_path and await aiofiles.os.path.exists(
                 trailer_new_folder_path
             ):
-                shutil.rmtree(trailer_new_folder_path, ignore_errors=True)
+                await asyncio.to_thread(shutil.rmtree, trailer_new_folder_path, ignore_errors=True)
             # 删除带文件名旧文件，用不到了
             if (
                 trailer_old_file_path_with_filename != trailer_new_file_path_with_filename
@@ -1087,7 +1098,7 @@ async def deal_old_files(
                 if str(extrafanart_old_path).lower() != str(
                     extrafanart_new_path
                 ).lower() and await aiofiles.os.path.exists(extrafanart_old_path):
-                    shutil.rmtree(extrafanart_old_path, ignore_errors=True)
+                    await asyncio.to_thread(shutil.rmtree, extrafanart_old_path, ignore_errors=True)
             elif await aiofiles.os.path.exists(extrafanart_old_path):
                 await move_file_async(extrafanart_old_path, extrafanart_new_path)
         except Exception:
@@ -1099,7 +1110,7 @@ async def deal_old_files(
                 if str(extrafanart_copy_old_path).lower() != str(
                     extrafanart_copy_new_path
                 ).lower() and await aiofiles.os.path.exists(extrafanart_copy_old_path):
-                    shutil.rmtree(extrafanart_copy_old_path, ignore_errors=True)
+                    await asyncio.to_thread(shutil.rmtree, extrafanart_copy_old_path, ignore_errors=True)
             elif await aiofiles.os.path.exists(extrafanart_copy_old_path):
                 await move_file_async(extrafanart_copy_old_path, extrafanart_copy_new_path)
         except Exception:
@@ -1110,7 +1121,7 @@ async def deal_old_files(
             if str(theme_videos_old_path).lower() != str(
                 theme_videos_new_path
             ).lower() and await aiofiles.os.path.exists(theme_videos_old_path):
-                shutil.rmtree(theme_videos_old_path, ignore_errors=True)
+                await asyncio.to_thread(shutil.rmtree, theme_videos_old_path, ignore_errors=True)
         elif await aiofiles.os.path.exists(theme_videos_old_path):
             await move_file_async(theme_videos_old_path, theme_videos_new_path)
 
@@ -1119,7 +1130,7 @@ async def deal_old_files(
             if str(extrafanart_extra_old_path).lower() != str(
                 extrafanart_extra_new_path
             ).lower() and await aiofiles.os.path.exists(extrafanart_extra_old_path):
-                shutil.rmtree(extrafanart_extra_old_path, ignore_errors=True)
+                await asyncio.to_thread(shutil.rmtree, extrafanart_extra_old_path, ignore_errors=True)
         elif await aiofiles.os.path.exists(extrafanart_extra_old_path):
             await move_file_async(extrafanart_extra_old_path, extrafanart_extra_new_path)
 

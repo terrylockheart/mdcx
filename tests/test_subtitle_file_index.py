@@ -23,3 +23,38 @@ def test_dedupe_existing_paths_keeps_path_order(tmp_path):
     second = tmp_path / "second.mp4"
 
     assert _dedupe_existing_paths([first, second, first]) == [first, second]
+
+
+@pytest.mark.asyncio
+async def test_build_file_name_index_caches_with_use_cache(tmp_path, monkeypatch):
+    import mdcx.utils.file as uf
+
+    folder = tmp_path / "subs"
+    folder.mkdir()
+    (folder / "ABC-123.srt").write_text("1\n", encoding="utf-8")
+
+    uf.clear_file_name_index_cache()
+    calls = {"n": 0}
+    real_builder = uf._build_file_name_index_sync
+
+    def counting_builder(f):
+        calls["n"] += 1
+        return real_builder(f)
+
+    monkeypatch.setattr(uf, "_build_file_name_index_sync", counting_builder)
+
+    first = await uf.build_file_name_index(folder, use_cache=True)
+    second = await uf.build_file_name_index(folder, use_cache=True)
+
+    assert calls["n"] == 1  # 第二次命中缓存, 不重复扫描
+    assert first is second
+    assert find_file_from_index(second, ("abc-123.srt",)) == folder / "ABC-123.srt"
+
+    # 不使用缓存时每次都重新扫描
+    await uf.build_file_name_index(folder, use_cache=False)
+    assert calls["n"] == 2
+
+    # 清空缓存后重新构建
+    uf.clear_file_name_index_cache()
+    await uf.build_file_name_index(folder, use_cache=True)
+    assert calls["n"] == 3
